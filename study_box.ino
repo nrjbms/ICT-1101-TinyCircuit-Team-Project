@@ -23,7 +23,7 @@
 
 // ---------------------------------------------------------------- config
 #define AMP_PORT            1                // Wireling Adapter port for amplifier
-#define HALL_PORT           3                // Wireling Adapter port for hall sensor
+#define HALL_PORT           2                // Wireling Adapter port for hall sensor
 #define AUDIO_PIN           A0               // A0 = SAMD21 DAC pin; confirmed working on your board even with amp on port 1
 #define HALL_PIN            (A0 + HALL_PORT) // VERIFY: port N maps to A<N> on the adapter
 #define HALL_CLOSED_LEVEL   LOW              // VERIFY: LOW = magnet detected = lid closed
