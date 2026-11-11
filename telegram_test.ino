@@ -15,6 +15,23 @@
 WiFiSSLClient wifiClient;
 UniversalTelegramBot bot(BOT_TOKEN, wifiClient);
 
+// Prints the first ~900 characters of a raw HTTPS GET response (headers + JSON)
+void rawGet(const String &path) {
+  if (!wifiClient.connect("api.telegram.org", 443)) { SerialUSB.println("  raw request: connect FAILED"); return; }
+  wifiClient.print("GET "); wifiClient.print(path); wifiClient.println(" HTTP/1.1");
+  wifiClient.println("Host: api.telegram.org");
+  wifiClient.println("Connection: close");
+  wifiClient.println();
+  unsigned long t0 = millis();
+  int count = 0;
+  while ((wifiClient.connected() || wifiClient.available()) && millis() - t0 < 8000 && count < 900) {
+    while (wifiClient.available() && count < 900) { SerialUSB.write(wifiClient.read()); count++; t0 = millis(); }
+  }
+  wifiClient.stop();
+  SerialUSB.println();
+  SerialUSB.println("  ---- end of response ----");
+}
+
 void setup() {
   SerialUSB.begin(115200);
   unsigned long t0 = millis();
@@ -53,12 +70,17 @@ void setup() {
   SerialUSB.print("STEP 6 Send test message: ");
   SerialUSB.println(bot.sendMessage(CHAT_ID, "Test message from the TinyScreen+", "") ? "OK (check Telegram)" : "FAILED (wrong chat ID, or you haven't pressed Start on the bot)");
 
-  SerialUSB.println("STEP 7 Now send /start 25 to your bot. Polling every 3 s...");
+  SerialUSB.println("STEP 7a Webhook check (a webhook blocks getUpdates):");
+  rawGet(String("/bot") + BOT_TOKEN + "/getWebhookInfo");
+  SerialUSB.println("STEP 7b Pending updates seen by Telegram (send /start 25 to your bot first):");
+  rawGet(String("/bot") + BOT_TOKEN + "/getUpdates?limit=5");
+  SerialUSB.println("STEP 7c Library polling every 3 s. Send /start 25 to your bot now...");
 }
 
 void loop() {
   if (WiFi.status() != WL_CONNECTED) { delay(1000); return; }
   int n = bot.getUpdates(bot.last_message_received + 1);
+  SerialUSB.print("  poll: "); SerialUSB.print(n); SerialUSB.println(" new message(s)");
   for (int i = 0; i < n; i++) {
     SerialUSB.print("  message from chat "); SerialUSB.print(bot.messages[i].chat_id);
     SerialUSB.print(": "); SerialUSB.println(bot.messages[i].text);
