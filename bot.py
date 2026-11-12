@@ -279,7 +279,7 @@ class StudyBoxHandler(BaseHTTPRequestHandler):
                 message = (
                     "<b>Congratulations for completing your study session!</b>\n\n"
                     f"You got distracted <b>{distractions}</b> times.\n\n"
-                    f"You lost <b>{html.escape(lost_text)}</b> from your study time.\n\n"
+                    f"You got distracted for a total of <b>{html.escape(lost_text)}</b> during your session.\n\n"
                     f"<i>“{html.escape(quote)}”</i>"
                 )
                 telegram_send(message)
