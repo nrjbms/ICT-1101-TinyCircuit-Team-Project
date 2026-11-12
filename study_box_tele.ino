@@ -20,9 +20,9 @@
 #include <Wireling.h>
 
 // ===================== USER SETTINGS =====================
-const char*    WIFI_SSID   = "<Need to Add In School>";
-const char*    WIFI_PASS   = "<Need to Add In School>";
-const char*    SERVER_HOST = "10.0.0.12";   // In Terminal type 'ipconfig' and should be under Wireless LAN adapter Wi-Fi: IPv4 Address
+const char*    WIFI_SSID   = "<TO BE ADDED>";
+const char*    WIFI_PASS   = "<TO BE ADDED>";
+const char*    SERVER_HOST = "<TO BE ADDED>";   // IPv4 of the PC running box.py
 const uint16_t SERVER_PORT = 8080;
 
 // !! COPY THESE FROM YOUR WORKING HALL/AMP SKETCH !!
@@ -47,9 +47,12 @@ State state = READY;
 // ---- timer ----
 uint8_t  durIdx = 5;            // 0 = 30 s test, k = k*5 min (max 24 = 2 h)
 uint32_t totalSecs = 0;
-int32_t  remainingMs = 0;       // valid while PAUSED
-uint32_t endMs = 0;             // valid while RUNNING / ALARM
+int32_t  remainingMs = 0;       // valid while PAUSED or ALARM
+uint32_t endMs = 0;             // valid while RUNNING
 uint16_t distractions = 0;
+uint32_t totalDistractionMs = 0;  // accumulated time with the lid open during a running session
+uint32_t distractionStartMs = 0;
+bool distractionActive = false;
 uint32_t sessionId = 0;
 
 // ---- lid ----
@@ -193,9 +196,12 @@ int32_t remainingNow() { return (int32_t)(endMs - millis()); }
 uint32_t displaySecs() {
   switch (state) {
     case READY:   return secsForIdx(durIdx);
-    case PAUSED:  return (remainingMs + 999) / 1000;
-    case RUNNING:
-    case ALARM: { int32_t r = remainingNow(); return r > 0 ? (r + 999) / 1000 : 0; }
+    case PAUSED:
+    case ALARM:   return (remainingMs > 0) ? (remainingMs + 999) / 1000 : 0;
+    case RUNNING: {
+      int32_t r = remainingNow();
+      return r > 0 ? (r + 999) / 1000 : 0;
+    }
     default:      return 0;
   }
 }
@@ -340,6 +346,9 @@ void enterReady() {
 void startSession() {
   totalSecs = secsForIdx(durIdx);
   distractions = 0;
+  totalDistractionMs = 0;
+  distractionStartMs = 0;
+  distractionActive = false;
   sessionId = millis();
   connectWifi();
   httpGet(String("/event?type=start&secs=") + totalSecs + "&sid=" + sessionId);  // best effort
@@ -361,8 +370,11 @@ void finishSession() {
 
 void trySendComplete() {
   connectWifi();
+  uint32_t lostMs = totalDistractionMs;
+  if (distractionActive) lostMs += millis() - distractionStartMs;
   String r = httpGet(String("/event?type=complete&secs=") + totalSecs +
-                     "&distractions=" + distractions + "&sid=" + sessionId, 3000);
+                     "&distractions=" + distractions + "&lost_ms=" + lostMs +
+                     "&sid=" + sessionId, 3000);
   if (r.startsWith("OK") || ++sendTries >= 5) needSend = false;
   else nextSendMs = millis() + 2000;
 }
@@ -394,6 +406,15 @@ void setup() {
 
 void loop() {
   updateLid();
+
+  // Stop the distraction timer when the lid closes. This is independent
+  // of RUNNING/ALARM/PAUSED so a button can silence the alarm without
+  // stopping the lost-time count while the lid is still open.
+  if (distractionActive && lidClosed) {
+    totalDistractionMs += millis() - distractionStartMs;
+    distractionActive = false;
+  }
+
   uint8_t b = display.getButtons();
   uint8_t pressed = b & ~lastButtons;
   lastButtons = b;
@@ -414,18 +435,51 @@ void loop() {
     case RUNNING: {
       int32_t rem = remainingNow();
       if (rem <= 0) { finishSession(); break; }
-      if (pressed) { remainingMs = rem; state = PAUSED; lastKey = 0xFFFFFFFF; }
-      else if (!lidClosed) { distractions++; state = ALARM; lastKey = 0xFFFFFFFF; }
+
+      if (pressed) {
+        remainingMs = rem;
+        state = PAUSED;
+        lastKey = 0xFFFFFFFF;
+      }
+      else if (!lidClosed) {
+        // Freeze the countdown and start measuring lost time.
+        remainingMs = rem;
+        distractions++;
+        distractionStartMs = millis();
+        distractionActive = true;
+        state = ALARM;
+        soundOff();
+        lastKey = 0xFFFFFFFF;
+      }
+
       render();
       break;
     }
 
     case ALARM: {
-      int32_t rem = remainingNow();
-      if (rem <= 0) { finishSession(); break; }
-      if (pressed)         { remainingMs = rem; state = PAUSED;  soundOff(); lastKey = 0xFFFFFFFF; }
-      else if (lidClosed)  { state = RUNNING; soundOff(); lastKey = 0xFFFFFFFF; }
-      else updateAlarmSound();
+      // remainingMs is frozen while the lid is open; endMs is not used here.
+      if (remainingMs <= 0) {
+        finishSession();
+        break;
+      }
+
+      if (pressed) {
+        // A button press silences the alarm and leaves the timer paused.
+        state = PAUSED;
+        soundOff();
+        lastKey = 0xFFFFFFFF;
+      }
+      else if (lidClosed) {
+        // Resume the countdown from the exact remaining time.
+        endMs = millis() + (uint32_t)remainingMs;
+        state = RUNNING;
+        soundOff();
+        lastKey = 0xFFFFFFFF;
+      }
+      else {
+        updateAlarmSound();
+      }
+
       render();
       break;
     }
