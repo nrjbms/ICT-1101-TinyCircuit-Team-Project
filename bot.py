@@ -1,10 +1,3 @@
-"""Study Box Telegram bot and HTTP server.
-
-Run with: python bot.py
-Install dependency: pip install requests
-Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID as environment variables.
-"""
-
 import html
 import json
 import os
