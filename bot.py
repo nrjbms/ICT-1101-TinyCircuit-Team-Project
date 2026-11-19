@@ -11,9 +11,9 @@ from urllib.parse import parse_qs, urlparse
 
 import requests
 
-# -------------------- SETTINGS --------------------
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "TELEGRAM_CHAT_ID")
+# Environment variables 
+BOT_TOKEN = os.getenv("8890906213:AAGK2jHQ7runjs42jOQWNHK0EHKvH-ha_Fw", "8890906213:AAGK2jHQ7runjs42jOQWNHK0EHKvH-ha_Fw")
+CHAT_ID = os.getenv("-5342151856", "-5342151856")
 HOST = "0.0.0.0"
 PORT = 8080
 DATA_FILE = Path(__file__).with_name("study_data.json")
@@ -25,9 +25,8 @@ lock = threading.Lock()
 pending_study_seconds = None
 sessions = {}
 
-
+# loads study data from json file, returns a list of records. If the file is missing or invalid, returns an empty list.
 def load_data():
-    """Load session history, accepting either the new object or a legacy list."""
     if not DATA_FILE.exists():
         return []
     try:
@@ -42,14 +41,14 @@ def load_data():
         print(f"Could not read {DATA_FILE.name}: {error}")
     return []
 
-
+# saves study data to json file. Writes to a temporary file first, then renames it to avoid data loss.
 def save_data(records):
     temp_file = DATA_FILE.with_suffix(".tmp")
     with temp_file.open("w", encoding="utf-8") as file:
         json.dump({"sessions": records}, file, indent=2, ensure_ascii=False)
     temp_file.replace(DATA_FILE)
 
-
+# loads quotes from json file, returns a list of quotes. If the file is missing or invalid, returns a default quote.
 def load_quotes():
     try:
         with QUOTES_FILE.open("r", encoding="utf-8") as file:
@@ -59,7 +58,7 @@ def load_quotes():
     except (OSError, json.JSONDecodeError, AttributeError):
         return ["Focus on Progress, Not Perfection"]
 
-
+# formats a duration in seconds into a human-readable string, e.g., "1 hr 5 mins" or "30 secs".
 def format_duration(seconds):
     seconds = max(0, int(round(float(seconds))))
     hours, remainder = divmod(seconds, 3600)
@@ -73,7 +72,7 @@ def format_duration(seconds):
         parts.append(f"{secs} sec" if secs == 1 else f"{secs} secs")
     return " ".join(parts) if parts else "0 mins"
 
-
+# parses an ISO 8601 timestamp string into a datetime object. Returns None if the value is invalid or empty.
 def parse_timestamp(value):
     if not value:
         return None
@@ -82,7 +81,7 @@ def parse_timestamp(value):
     except (TypeError, ValueError):
         return None
 
-
+# sends a message to the configured Telegram chat using the bot token. Returns True if successful, False otherwise.
 def telegram_send(message):
     if not BOT_TOKEN or BOT_TOKEN.startswith("PASTE_") or not CHAT_ID or CHAT_ID.startswith("PASTE_"):
         print("Telegram message not sent: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.")
@@ -100,7 +99,7 @@ def telegram_send(message):
         print(f"Telegram send error: {error}")
         return False
 
-
+# builds a weekly report of study sessions, grouped by day, and returns it as a formatted string.
 def build_week_report():
     now = datetime.now().astimezone()
     monday = (now - timedelta(days=now.weekday())).date()
@@ -135,11 +134,11 @@ def build_week_report():
     lines.append("---------------------------------")
     return "\n".join(lines)
 
-
+# checks if the given chat_id matches the configured CHAT_ID. Returns True if valid, False otherwise.
 def valid_chat(chat_id):
     return not CHAT_ID or CHAT_ID.startswith("PASTE_") or str(chat_id) == str(CHAT_ID)
 
-
+# handles incoming Telegram commands from messages. Supports /start, /study, and /week commands.
 def handle_command(message):
     global pending_study_seconds
     chat_id = message.get("chat", {}).get("id")
@@ -155,9 +154,9 @@ def handle_command(message):
     if command == "/start":
         telegram_send(
             "<b>Study Box is ready.</b>\n"
-            "Use <code>/study 25</code> to set 25 minutes,\n"
-            "or <code>/study 30s</code> for a 30-second test.\n"
-            "Use <code>/week</code> to view this week's logs."
+            "Type <code>/study 25</code> to set 25 minutes,\n"
+            "Type <code>/study 30s</code> for a 30-second test.\n"
+            "Type <code>/week</code> to view this week's logs."
         )
     elif command == "/study":
         if len(args) != 1:
@@ -184,7 +183,7 @@ def handle_command(message):
     else:
         telegram_send("Commands: <code>/study 25</code>, <code>/study 30s</code>, <code>/week</code>")
 
-
+# polls the Telegram API for new messages and handles commands. Runs in a separate thread.
 def telegram_polling():
     if BOT_TOKEN.startswith("PASTE_"):
         print("Set TELEGRAM_BOT_TOKEN before using Telegram commands.")
@@ -207,7 +206,7 @@ def telegram_polling():
             print(f"Telegram polling error: {error}")
             time.sleep(3)
 
-
+# HTTP server handler for Study Box. Handles /poll, /event, and /health requests from the Arduino.
 class StudyBoxHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         global pending_study_seconds
@@ -300,7 +299,7 @@ class StudyBoxHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"HTTP: {fmt % args}")
 
-
+# main entry point for the Study Box server. Starts the Telegram polling thread and the HTTP server.
 def main():
     print(f"Study Box server listening on http://0.0.0.0:{PORT}")
     print(f"Session data: {DATA_FILE}")
